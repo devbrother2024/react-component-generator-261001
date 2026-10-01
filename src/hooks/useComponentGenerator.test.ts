@@ -10,11 +10,37 @@ const storedComponent = {
   createdAt: '2026-10-01T05:00:00.000Z',
 };
 
-function mockFetchResponse(ok: boolean, body: unknown) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({ ok, json: () => Promise.resolve(body) }),
-  );
+// 서버 NDJSON 스트림을 흉내 낸다. 테스트가 이벤트를 원하는 시점에 흘려보낼 수 있도록 controller를 돌려준다.
+function createControlledStream() {
+  const encoder = new TextEncoder();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+    },
+  });
+  return {
+    body,
+    send: (event: object) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`)),
+    close: () => controller.close(),
+  };
+}
+
+function mockFetchResponse(ok: boolean, body: { code?: string; error?: string }) {
+  if (!ok) {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok, json: () => Promise.resolve(body) }));
+    return;
+  }
+  const stream = createControlledStream();
+  stream.send({ type: 'done', code: body.code });
+  stream.close();
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok, body: stream.body }));
+}
+
+function mockFetchStream() {
+  const stream = createControlledStream();
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: stream.body }));
+  return stream;
 }
 
 function readStored(key: string) {
@@ -112,5 +138,76 @@ describe('useComponentGenerator 저장/복원', () => {
       .map((key) => localStorage.getItem(key))
       .join('');
     expect(everything).not.toContain('sk-ant-secret');
+  });
+});
+
+describe('useComponentGenerator 스트리밍', () => {
+  it('생성 중에는 받은 코드 조각을 streamingComponent에 누적한다', async () => {
+    const stream = mockFetchStream();
+    const { result } = renderHook(() => useComponentGenerator());
+
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.generate('버튼', undefined, 'google');
+    });
+    await act(async () => {
+      stream.send({ type: 'delta', text: 'const ' });
+      stream.send({ type: 'delta', text: 'A' });
+    });
+
+    expect(result.current.streamingComponent).toEqual(
+      expect.objectContaining({ prompt: '버튼', code: 'const A' }),
+    );
+
+    await act(async () => {
+      stream.send({ type: 'done', code: 'render(<A />)' });
+      stream.close();
+      await pending;
+    });
+  });
+
+  it('생성이 끝나면 streamingComponent를 비우고 같은 id로 목록 맨 앞에 추가한다', async () => {
+    const stream = mockFetchStream();
+    const { result } = renderHook(() => useComponentGenerator());
+
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.generate('버튼', undefined, 'google');
+    });
+    await act(async () => {
+      stream.send({ type: 'delta', text: 'const A' });
+    });
+    const streamingId = result.current.streamingComponent?.id;
+
+    await act(async () => {
+      stream.send({ type: 'done', code: 'render(<A />)' });
+      stream.close();
+      await pending;
+    });
+
+    expect(result.current.streamingComponent).toBeNull();
+    expect(result.current.components[0]).toEqual(
+      expect.objectContaining({ id: streamingId, code: 'render(<A />)' }),
+    );
+  });
+
+  it('생성 도중 실패하면 streamingComponent를 비우고 에러를 보여준다', async () => {
+    const stream = mockFetchStream();
+    const { result } = renderHook(() => useComponentGenerator());
+
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.generate('버튼', undefined, 'google');
+    });
+    await act(async () => {
+      stream.send({ type: 'delta', text: 'const A' });
+      stream.send({ type: 'error', error: '과부하' });
+      stream.close();
+      await pending;
+    });
+
+    expect(result.current.streamingComponent).toBeNull();
+    expect(result.current.error).toBe('과부하');
+    expect(result.current.components).toEqual([]);
   });
 });
