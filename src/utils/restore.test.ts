@@ -48,6 +48,10 @@ describe('restoreComponents', () => {
     expect(component.createdAt.toISOString()).toBe('2026-10-01T05:00:00.000Z');
   });
 
+  it('복원한 컴포넌트에는 restored 표시를 붙인다', () => {
+    expect(restoreComponents([stored])[0].restored).toBe(true);
+  });
+
   it('배열이 아니면 빈 배열을 반환한다', () => {
     expect(restoreComponents({})).toEqual([]);
   });

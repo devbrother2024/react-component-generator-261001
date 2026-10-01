@@ -24,6 +24,6 @@ export function restoreComponents(value: unknown): GeneratedComponent[] {
     }
     const date = new Date(createdAt as string);
     if (typeof createdAt !== 'string' || Number.isNaN(date.getTime())) return [];
-    return [{ id, prompt, code, createdAt: date }];
+    return [{ id, prompt, code, createdAt: date, restored: true }];
   });
 }
