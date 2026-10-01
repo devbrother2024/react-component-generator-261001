@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PromptInput } from './PromptInput';
 
@@ -64,5 +64,25 @@ describe('PromptInput', () => {
   it('로딩 중에는 생성 버튼이 비활성이고 "생성 중..." 을 보여준다', () => {
     render(<PromptInput onGenerate={vi.fn()} isLoading={true} />);
     expect(screen.getByRole('button', { name: '생성 중...' })).toBeDisabled();
+  });
+
+  it('프롬프트 히스토리를 "최근 프롬프트" 목록으로 보여준다', () => {
+    render(
+      <PromptInput onGenerate={vi.fn()} isLoading={false} history={['프로필 카드', '검색 바']} />,
+    );
+
+    const list = screen.getByRole('list', { name: '최근 프롬프트' });
+    expect(within(list).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      '프로필 카드',
+      '검색 바',
+    ]);
+  });
+
+  it('최근 프롬프트를 누르면 입력창에 채워진다', async () => {
+    const user = userEvent.setup();
+    render(<PromptInput onGenerate={vi.fn()} isLoading={false} history={['프로필 카드']} />);
+
+    await user.click(screen.getByRole('button', { name: '프로필 카드' }));
+    expect(screen.getByRole('textbox')).toHaveValue('프로필 카드');
   });
 });

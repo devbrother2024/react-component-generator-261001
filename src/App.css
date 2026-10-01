@@ -159,7 +159,8 @@
 /* ---------- Keys (물리 버튼) ---------- */
 
 .key,
-.example-chip {
+.example-chip,
+.history-chip {
   background: #f6f5f1;
   border: 1px solid var(--well-deep);
   border-radius: 6px;
@@ -173,12 +174,14 @@
 }
 
 .key:hover:not(:disabled),
-.example-chip:hover {
+.example-chip:hover,
+.history-chip:hover {
   background: #ffffff;
 }
 
 .key:active:not(:disabled),
-.example-chip:active {
+.example-chip:active,
+.history-chip:active {
   transform: translateY(2px);
   box-shadow: 0 1px 0 var(--well-deep);
 }
@@ -355,6 +358,45 @@
   font-size: 0.875rem;
   line-height: 1.5;
   text-align: left;
+}
+
+/* 최근 프롬프트: 한 줄 칩으로 줄바꿈 배치, 긴 프롬프트는 말줄임 */
+.prompt-history {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--well);
+}
+
+.history-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-keys li {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.history-chip {
+  display: block;
+  max-width: 280px;
+  padding: 6px 12px;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .history-chip {
+    max-width: 100%;
+  }
 }
 
 /* ---------- Settings ---------- */
@@ -606,6 +648,24 @@
   box-shadow: inset 0 2px 4px rgba(42, 40, 37, 0.08);
 }
 
+/* 복원된 컴포넌트: 미리보기 영역 크기를 유지한 채 실행 버튼만 보여준다 */
+.preview-paused {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  min-height: 340px;
+  margin: 16px 22px 22px;
+  padding: 36px;
+  background: #f8f7f3;
+  border: 1px dashed var(--well-deep);
+  border-radius: 6px;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
 .preview-error {
   margin-top: 12px;
   padding: 12px 14px;
@@ -712,8 +772,13 @@
     flex: 1;
   }
 
-  .preview-render {
+  .preview-render,
+  .preview-paused {
     min-height: 240px;
     padding: 20px;
+  }
+
+  .preview-paused {
+    margin: 16px 16px 22px;
   }
 }
