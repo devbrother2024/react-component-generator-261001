@@ -23,6 +23,15 @@ describe('restorePromptHistory', () => {
   it('문자열이 아닌 항목은 버린다', () => {
     expect(restorePromptHistory(['A', 1, null, 'B'])).toEqual(['A', 'B']);
   });
+
+  it('중복된 프롬프트는 앞쪽 하나만 남긴다', () => {
+    expect(restorePromptHistory(['A', 'B', 'A'])).toEqual(['A', 'B']);
+  });
+
+  it('20개를 넘으면 앞쪽 20개만 복원한다', () => {
+    const stored = Array.from({ length: 25 }, (_, i) => `p${i}`);
+    expect(restorePromptHistory(stored)).toEqual(stored.slice(0, 20));
+  });
 });
 
 describe('restoreComponents', () => {

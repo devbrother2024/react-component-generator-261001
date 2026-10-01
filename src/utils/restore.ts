@@ -1,4 +1,5 @@
 import type { GeneratedComponent, Provider } from '../types';
+import { MAX_PROMPT_HISTORY } from './promptHistory';
 
 // localStorage 값은 손상되었거나 예전 형식일 수 있으므로 신뢰하지 않고 검증한 뒤 복원한다.
 
@@ -10,7 +11,8 @@ export function restoreProvider(value: unknown): Provider {
 
 export function restorePromptHistory(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string');
+  const prompts = value.filter((item): item is string => typeof item === 'string');
+  return [...new Set(prompts)].slice(0, MAX_PROMPT_HISTORY);
 }
 
 export function restoreComponents(value: unknown): GeneratedComponent[] {
