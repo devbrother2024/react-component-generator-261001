@@ -22,8 +22,18 @@ function App() {
     anthropic: false,
     google: false,
   });
-  const { components, history, isLoading, error, generate, removeComponent, clearAll } =
-    useComponentGenerator();
+  const {
+    components,
+    history,
+    streamingComponent,
+    isLoading,
+    error,
+    generate,
+    removeComponent,
+    clearAll,
+  } = useComponentGenerator();
+  // 생성 중인 카드를 맨 앞에 둔다. 완료되면 같은 id(key)로 목록에 들어가 카드가 리마운트 없이 이어진다.
+  const cards = streamingComponent ? [streamingComponent, ...components] : components;
 
   useEffect(() => {
     fetch('/api/config')
@@ -151,16 +161,16 @@ function App() {
       )}
 
       <section className="results-section" aria-label="생성 결과">
-        {components.length > 0 && (
+        {cards.length > 0 && (
           <div className="results-header">
             <h2>생성된 컴포넌트</h2>
-            <button className="key key--small key--quiet" onClick={clearAll}>
+            <button className="key key--small key--quiet" onClick={clearAll} disabled={isLoading}>
               전체 삭제
             </button>
           </div>
         )}
 
-        {components.length === 0 && !isLoading && (
+        {cards.length === 0 && (
           <div className="empty-state">
             <div className="empty-screen" aria-hidden="true">
               <span />
@@ -175,21 +185,15 @@ function App() {
           </div>
         )}
 
-        {isLoading && (
-          <div className="loading-card" role="status">
-            <span className="led led--busy" aria-hidden="true" />
-            <p>컴포넌트를 생성하고 있습니다.</p>
-          </div>
-        )}
-
         <div className="results-grid">
-          {components.map((component) => (
+          {cards.map((component) => (
             <ComponentCard
               key={component.id}
               component={component}
               onRemove={removeComponent}
               onRegenerate={handleGenerate}
               isLoading={isLoading}
+              streaming={component === streamingComponent}
             />
           ))}
         </div>

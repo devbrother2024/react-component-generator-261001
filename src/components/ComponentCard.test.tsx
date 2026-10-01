@@ -51,3 +51,60 @@ describe('ComponentCard 복원된 컴포넌트', () => {
     expect(screen.getByRole('button', { name: '다시 보기' })).toBeDisabled();
   });
 });
+
+const streamingComponent: GeneratedComponent = {
+  id: '2',
+  prompt: '버튼',
+  code: 'const Button = () =>',
+  createdAt: new Date('2026-10-01T05:00:00.000Z'),
+};
+
+function streamingCard(streaming: boolean, component = streamingComponent) {
+  return (
+    <ComponentCard
+      component={component}
+      onRemove={vi.fn()}
+      onRegenerate={vi.fn()}
+      isLoading={streaming}
+      streaming={streaming}
+    />
+  );
+}
+
+describe('ComponentCard 생성 중(스트리밍)', () => {
+  it('코드 탭을 선택하고 지금까지 받은 코드를 보여준다', () => {
+    render(streamingCard(true));
+
+    expect(screen.getByRole('tab', { name: '코드' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('const Button = () =>')).toBeInTheDocument();
+  });
+
+  it('미리보기 탭을 누를 수 없다', () => {
+    render(streamingCard(true));
+
+    expect(screen.getByRole('tab', { name: '미리보기' })).toBeDisabled();
+  });
+
+  it('코드를 보여주는 동안 코드 복사 버튼을 숨긴다', () => {
+    render(streamingCard(true));
+
+    expect(screen.getByText('const Button = () =>')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '코드 복사' })).not.toBeInTheDocument();
+  });
+
+  it('삭제 버튼을 누를 수 없다', () => {
+    render(streamingCard(true));
+
+    expect(screen.getByRole('button', { name: '삭제' })).toBeDisabled();
+  });
+
+  it('생성이 끝나면 미리보기 탭으로 전환해 미리보기를 실행한다', () => {
+    const { rerender } = render(streamingCard(true));
+    expect(screen.getByRole('tab', { name: '코드' })).toHaveAttribute('aria-selected', 'true');
+
+    rerender(streamingCard(false, { ...streamingComponent, code: 'render(<Button />)' }));
+
+    expect(screen.getByRole('tab', { name: '미리보기' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('live-preview')).toBeInTheDocument();
+  });
+});
