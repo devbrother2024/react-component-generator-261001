@@ -1,5 +1,6 @@
-import { stripCodeFences, ensureRenderCall } from './generator';
 import { withModelFallback } from './fallback';
+import { toClientError } from './errors';
+import { readSSEData, parseAnthropicEvent, parseGeminiEvent, createGenerateStream } from './stream';
 
 // 우선순위 순서. 앞 모델이 실패하면 다음 모델로 폴백한다.
 const GOOGLE_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash'];
@@ -65,7 +66,9 @@ function resolveApiKey(provider: Provider, clientKey?: string): string | null {
   return clientKey || ENV_KEYS[provider] || null;
 }
 
-async function callAnthropic(prompt: string, apiKey: string): Promise<string> {
+// 연결(HTTP 상태 확인)까지만 하고 응답 body를 돌려준다.
+// 연결 실패는 스트리밍 시작 전이라 HTTP 에러 응답으로, 이후 실패는 스트림의 error 이벤트로 전달된다.
+async function openAnthropicStream(prompt: string, apiKey: string): Promise<ReadableStream<Uint8Array>> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -76,27 +79,24 @@ async function callAnthropic(prompt: string, apiKey: string): Promise<string> {
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
+      stream: true,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
 
-  if (!response.ok) {
+  if (!response.ok || !response.body) {
     throw new Error(`Claude API error: ${response.status}`);
   }
-
-  const data = (await response.json()) as {
-    content: Array<{ type: string; text?: string }>;
-  };
-
-  return data.content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
-    .join('');
+  return response.body;
 }
 
-async function callGoogleModel(prompt: string, apiKey: string, model: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+async function openGoogleModelStream(
+  prompt: string,
+  apiKey: string,
+  model: string,
+): Promise<ReadableStream<Uint8Array>> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -108,35 +108,28 @@ async function callGoogleModel(prompt: string, apiKey: string, model: string): P
     }),
   });
 
-  if (!response.ok) {
+  if (!response.ok || !response.body) {
     throw new Error(`Gemini API error: ${response.status}`);
   }
-
-  const data = (await response.json()) as {
-    candidates: Array<{
-      content: { parts: Array<{ text?: string }> };
-      finishReason?: string;
-    }>;
-  };
-
-  const candidate = data.candidates?.[0];
-  if (candidate?.finishReason === 'MAX_TOKENS') {
-    throw new Error('생성된 코드가 너무 길어 잘렸습니다. 더 간단한 컴포넌트를 요청해주세요.');
-  }
-
-  return (
-    candidate?.content?.parts
-      ?.map((part) => part.text)
-      ?.join('') ?? ''
-  );
+  return response.body;
 }
 
-async function callGoogle(prompt: string, apiKey: string): Promise<string> {
-  return withModelFallback(GOOGLE_MODELS, (model) => callGoogleModel(prompt, apiKey, model));
+// 폴백은 연결 단계에서만 일어난다. 스트리밍이 시작된 뒤 다른 모델로 넘어가면 출력이 섞이기 때문이다.
+async function openGoogleStream(prompt: string, apiKey: string): Promise<ReadableStream<Uint8Array>> {
+  return withModelFallback(GOOGLE_MODELS, (model) => openGoogleModelStream(prompt, apiKey, model));
+}
+
+async function* toTextDeltas(body: ReadableStream<Uint8Array>, parse: (data: string) => string) {
+  for await (const data of readSSEData(body)) {
+    const text = parse(data);
+    if (text) yield text;
+  }
 }
 
 const server = Bun.serve({
   port: 3002,
+  // 기본 10초는 모델이 첫 토큰을 내기 전 생각하는 동안 연결을 끊을 수 있어 늘린다.
+  idleTimeout: 120,
   async fetch(req) {
     if (req.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });
@@ -180,35 +173,23 @@ const server = Bun.serve({
           );
         }
 
-        const text =
+        const deltas =
           provider === 'google'
-            ? await callGoogle(prompt, resolvedKey)
-            : await callAnthropic(prompt, resolvedKey);
+            ? toTextDeltas(await openGoogleStream(prompt, resolvedKey), parseGeminiEvent)
+            : toTextDeltas(await openAnthropicStream(prompt, resolvedKey), parseAnthropicEvent);
 
-        const code = ensureRenderCall(stripCodeFences(text));
-
-        return Response.json({ code }, { headers: CORS_HEADERS });
+        // NDJSON 한 줄씩 delta → done(정규화한 코드) 또는 error 이벤트를 보낸다.
+        return new Response(createGenerateStream(deltas), {
+          headers: {
+            ...CORS_HEADERS,
+            'Content-Type': 'application/x-ndjson; charset=utf-8',
+            'Cache-Control': 'no-cache',
+          },
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
-
-        if (message.includes('503')) {
-          return Response.json(
-            { error: 'API 서버가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해주세요.' },
-            { status: 503, headers: CORS_HEADERS }
-          );
-        }
-
-        if (message.includes('429')) {
-          return Response.json(
-            { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
-            { status: 429, headers: CORS_HEADERS }
-          );
-        }
-
-        return Response.json(
-          { error: message },
-          { status: 500, headers: CORS_HEADERS }
-        );
+        const { status, error } = toClientError(message);
+        return Response.json({ error }, { status, headers: CORS_HEADERS });
       }
     }
 
