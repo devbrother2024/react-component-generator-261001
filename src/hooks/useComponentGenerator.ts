@@ -4,6 +4,9 @@ import { readStorage, writeStorage, STORAGE_KEYS } from '../utils/storage';
 import { restoreComponents, restorePromptHistory } from '../utils/restore';
 import { addPromptToHistory } from '../utils/promptHistory';
 
+// 생성 코드 전체를 저장하므로 localStorage 용량(약 5MB)을 넘지 않도록 최신 항목만 저장한다.
+const MAX_SAVED_COMPONENTS = 30;
+
 interface UseComponentGeneratorReturn {
   components: GeneratedComponent[];
   history: string[];
@@ -25,7 +28,7 @@ export function useComponentGenerator(): UseComponentGeneratorReturn {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    writeStorage(STORAGE_KEYS.components, components);
+    writeStorage(STORAGE_KEYS.components, components.slice(0, MAX_SAVED_COMPONENTS));
   }, [components]);
 
   useEffect(() => {

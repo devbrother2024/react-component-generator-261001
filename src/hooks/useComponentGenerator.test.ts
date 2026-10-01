@@ -50,6 +50,20 @@ describe('useComponentGenerator 저장/복원', () => {
     ]);
   });
 
+  it('저장 용량을 넘지 않도록 최신 30개까지만 localStorage에 저장한다', async () => {
+    const saved = Array.from({ length: 30 }, (_, i) => ({ ...storedComponent, id: `saved-${i}` }));
+    localStorage.setItem(STORAGE_KEYS.components, JSON.stringify(saved));
+    mockFetchResponse(true, { code: 'render(<p />)' });
+    const { result } = renderHook(() => useComponentGenerator());
+
+    await act(() => result.current.generate('버튼', undefined, 'google'));
+
+    const stored = readStored(STORAGE_KEYS.components);
+    expect(stored).toHaveLength(30);
+    expect(stored[0].prompt).toBe('버튼');
+    expect(stored.map((c: { id: string }) => c.id)).not.toContain('saved-29');
+  });
+
   it('컴포넌트를 삭제하면 저장된 목록에서도 빠진다', () => {
     localStorage.setItem(STORAGE_KEYS.components, JSON.stringify([storedComponent]));
     const { result } = renderHook(() => useComponentGenerator());
