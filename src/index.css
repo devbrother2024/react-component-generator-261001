@@ -1,0 +1,74 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+
+  /* 하우징과 패널: 70년대 가전 본체의 웜 그레이 */
+  --housing: #dad7cf;
+  --panel: #eceae4;
+  --well: #c9c5bb;
+  --well-deep: #b4afa3;
+  --ink: #2a2825;
+  --ink-soft: #6b665d;
+  --ink-faint: #8f8a80;
+
+  /* 신호색: 생성 키 하나, LED 둘 */
+  --key: #edb021;
+  --key-edge: #a07612;
+  --led-on: #3e8e57;
+  --led-busy: #e0861b;
+  --signal: #b8432c;
+
+  /* LCD 창 */
+  --lcd: #a7b096;
+  --lcd-ink: #262b1f;
+  --lcd-ghost: rgba(38, 43, 31, 0.12);
+
+  --font-sans: 'IBM Plex Sans KR', 'Apple SD Gothic Neo', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --font-lcd: 'Doto', var(--font-mono);
+}
+
+body {
+  min-height: 100vh;
+  background: var(--housing);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
